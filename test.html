@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APEX × Prebid.js — Live Auction Demo</title>
+  <script async src="https://unpkg.com/prebid.js@9.14.0/dist/prebid.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #fff;
+    }
+    header .badge {
+      background: #f5c518;
+      color: #000;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      max-width: 1200px;
+    }
+
+    /* ── Ad slots ── */
+    .ad-panel h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #888;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .ad-slot-wrapper {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .ad-slot-wrapper .slot-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .slot-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+    }
+    .slot-status {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: #222;
+      color: #666;
+      border: 1px solid #333;
+    }
+    .slot-status.waiting  { color: #888; }
+    .slot-status.bidding  { color: #f5c518; background: #2a2200; border-color: #4a3800; }
+    .slot-status.won      { color: #4ade80; background: #012010; border-color: #164020; }
+    .slot-status.nobid    { color: #f87171; background: #1a0a0a; border-color: #3a1010; }
+
+    .ad-container {
+      background: #111;
+      border: 1px dashed #333;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      min-height: 100px;
+    }
+    .ad-placeholder {
+      color: #444;
+      font-size: 12px;
+      text-align: center;
+    }
+    .ad-placeholder .size { font-size: 16px; font-weight: 700; color: #333; margin-bottom: 4px; }
+
+    #div-banner-300x250 { width: 300px; height: 250px; }
+    #div-banner-728x90  { width: 728px; height: 90px; max-width: 100%; }
+    #div-native-flex    { width: 100%; min-height: 120px; }
+
+    /* ── Bid log panel ── */
+    .log-panel { display: flex; flex-direction: column; gap: 16px; }
+
+    .log-panel h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #888;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .auction-summary {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid #222;
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row .label { color: #666; }
+    .summary-row .value { color: #ccc; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .summary-row .value.green { color: #4ade80; }
+    .summary-row .value.yellow { color: #f5c518; }
+
+    .bid-log {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      overflow: hidden;
+      flex: 1;
+    }
+    .bid-log-header {
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #888;
+      border-bottom: 1px solid #222;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .bid-entries {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .bid-entry {
+      display: grid;
+      grid-template-columns: 80px 1fr 70px 60px;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 11px;
+      border-bottom: 1px solid #1e1e1e;
+      align-items: center;
+      transition: background 0.2s;
+    }
+    .bid-entry:hover { background: #1f1f1f; }
+    .bid-entry .bidder { color: #a78bfa; font-weight: 600; }
+    .bid-entry .slot-lbl { color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bid-entry .cpm { color: #4ade80; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .bid-entry .cpm.nobid { color: #f87171; }
+    .bid-entry .time { color: #555; text-align: right; }
+    .bid-entry.winner { background: #0a1a0a; border-left: 2px solid #4ade80; }
+
+    /* ── Request viewer ── */
+    .request-viewer {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .request-viewer-header {
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #888;
+      border-bottom: 1px solid #222;
+      display: flex;
+      gap: 8px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .tab-btn.active { background: #2a2a2a; color: #ccc; }
+    pre.code-view {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 10px;
+      color: #8b8b8b;
+      padding: 12px 16px;
+      max-height: 220px;
+      overflow-y: auto;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    pre.code-view .key   { color: #7dd3fc; }
+    pre.code-view .str   { color: #86efac; }
+    pre.code-view .num   { color: #fbbf24; }
+    pre.code-view .bool  { color: #c084fc; }
+
+    /* ── APEX layer callout ── */
+    .apex-callout {
+      background: #0d1a0d;
+      border: 1px solid #1a3a1a;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .apex-callout h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #4ade80;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .apex-callout p {
+      font-size: 11px;
+      color: #666;
+      line-height: 1.6;
+    }
+    .apex-callout .apex-item {
+      font-size: 11px;
+      color: #888;
+      padding: 3px 0;
+      display: flex;
+      gap: 6px;
+    }
+    .apex-callout .apex-item::before {
+      content: '→';
+      color: #4ade80;
+      flex-shrink: 0;
+    }
+
+    /* ── Run button ── */
+    .run-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .run-btn {
+      background: #f5c518;
+      color: #000;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .run-btn:hover { background: #ffd740; }
+    .run-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+    .run-desc { font-size: 12px; color: #555; }
+
+    .timer {
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: #f5c518;
+      font-weight: 600;
+      margin-left: auto;
+    }
+
+    /* ── APEX SSP block ── */
+    .apex-ssp-note {
+      grid-column: 1 / -1;
+      background: #0d1a0d;
+      border: 1px solid #1a3a1a;
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+    .apex-ssp-note .apex-tag {
+      background: #4ade80;
+      color: #000;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      letter-spacing: 0.5px;
+    }
+    .apex-ssp-note .note-body h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+      margin-bottom: 4px;
+    }
+    .apex-ssp-note .note-body p {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.6;
+    }
+    .apex-ssp-note .note-body code {
+      font-family: 'SF Mono', monospace;
+      font-size: 10px;
+      background: #1a2a1a;
+      padding: 2px 5px;
+      border-radius: 3px;
+      color: #86efac;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>APEX × Prebid.js</h1>
+  <span class="badge">LIVE AUCTION DEMO</span>
+</header>
+
+<div class="run-bar">
+  <button class="run-btn" id="runBtn" onclick="runAuction()">Run Auction</button>
+  <span class="run-desc">Fires real bid requests to test DSP endpoints via Prebid.js</span>
+  <span class="timer" id="timerDisplay"></span>
+</div>
+
+<div class="layout">
+
+  <!-- Left: ad slots -->
+  <div class="ad-panel">
+    <h2>Ad inventory</h2>
+
+    <!-- Slot 1: 300x250 -->
+    <div class="ad-slot-wrapper">
+      <div class="slot-meta">
+        <span class="slot-name">Banner 300×250 — "Research query"</span>
+        <span class="slot-status waiting" id="status-slot1">Waiting</span>
+      </div>
+      <div class="ad-container" id="div-banner-300x250">
+        <div class="ad-placeholder">
+          <div class="size">300×250</div>
+          Hit "Run Auction" to fill
+        </div>
+      </div>
+    </div>
+
+    <!-- Slot 2: 728x90 -->
+    <div class="ad-slot-wrapper">
+      <div class="slot-meta">
+        <span class="slot-name">Leaderboard 728×90 — "Product comparison"</span>
+        <span class="slot-status waiting" id="status-slot2">Waiting</span>
+      </div>
+      <div class="ad-container" id="div-banner-728x90">
+        <div class="ad-placeholder">
+          <div class="size">728×90</div>
+          Hit "Run Auction" to fill
+        </div>
+      </div>
+    </div>
+
+    <!-- APEX SSP note -->
+    <div class="apex-ssp-note" style="grid-column:unset; margin-top:8px;">
+      <span class="apex-tag">APEX</span>
+      <div class="note-body">
+        <h4>Where APEX plugs into this flow</h4>
+        <p>
+          In this demo, Prebid is calling test DSP endpoints directly. In the APEX architecture,
+          you expose an OpenRTB-compliant SSP endpoint that Prebid calls as a bidder adapter.
+          The <code>publisher.id</code> in each bid request maps to an ERC-8004 agent identity.
+          The winning bid triggers an x402 payment — no <code>burl</code> pixel, no invoice reconciliation.
+          Add <code>bidder: 'apex'</code> to any ad unit and your validator network handles the rest.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: log + inspector -->
+  <div class="log-panel">
+
+    <div>
+      <h2>Auction summary</h2>
+      <div class="auction-summary">
+        <div class="summary-row">
+          <span class="label">Status</span>
+          <span class="value" id="sum-status">—</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Auctions fired</span>
+          <span class="value" id="sum-auctions">0</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Bids received</span>
+          <span class="value yellow" id="sum-bids">0</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Winning CPM</span>
+          <span class="value green" id="sum-cpm">—</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Elapsed</span>
+          <span class="value" id="sum-elapsed">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="bid-log">
+        <div class="bid-log-header">
+          <span>Bid responses</span>
+          <span style="color:#444; font-weight:400">live stream</span>
+        </div>
+        <div class="bid-entries" id="bidEntries">
+          <div style="padding:16px; color:#444; font-size:11px; text-align:center;">
+            Waiting for auction…
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="request-viewer">
+        <div class="request-viewer-header">
+          <button class="tab-btn active" id="tab-req" onclick="showTab('req')">Bid Request</button>
+          <button class="tab-btn" id="tab-res" onclick="showTab('res')">Bid Response</button>
+          <button class="tab-btn" id="tab-adunit" onclick="showTab('adunit')">Ad Unit Config</button>
+        </div>
+        <pre class="code-view" id="codeView">// Run an auction to see live request/response data here</pre>
+      </div>
+    </div>
+
+    <div class="apex-callout">
+      <h3>APEX SSP adapter — what you'd add</h3>
+      <div class="apex-item">Register the agent via ERC-8004 — this becomes <code>publisher.id</code></div>
+      <div class="apex-item">Expose <code>POST /openrtb2/auction</code> returning a standard bid response</div>
+      <div class="apex-item">Add <code>bidder: 'apex'</code> to the ad unit's <code>bids</code> array below</div>
+      <div class="apex-item">Validator confirms delivery → x402 settles on-chain, no pixel needed</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Prebid config ─────────────────────────────────────────────────────────
+  // Wait for prebid to load
+  var pbjs = pbjs || {};
+  pbjs.que = pbjs.que || [];
+
+  // Ad unit definitions — these are what an AI agent "publisher" would register
+  var adUnits = [
+    {
+      code: 'div-banner-300x250',
+      mediaTypes: {
+        banner: { sizes: [[300, 250]] }
+      },
+      bids: [
+        {
+          // AppNexus test member — returns real test bids
+          bidder: 'appnexus',
+          params: { placementId: 13144370 }
+        },
+        {
+          // Rubicon (Magnite) test params
+          bidder: 'rubicon',
+          params: { accountId: 14062, siteId: 70608, zoneId: 335918 }
+        }
+        /*
+         * ── APEX ADAPTER (not yet built) ────────────────────────────────
+         * {
+         *   bidder: 'apex',
+         *   params: {
+         *     agentId: '0x1234...', // ERC-8004 token ID
+         *     endpoint: 'https://api.apexnetwork.app/openrtb2/auction'
+         *   }
+         * }
+         */
+      ]
+    },
+    {
+      code: 'div-banner-728x90',
+      mediaTypes: {
+        banner: { sizes: [[728, 90], [970, 90]] }
+      },
+      bids: [
+        {
+          bidder: 'appnexus',
+          params: { placementId: 13144370 }
+        },
+        {
+          bidder: 'rubicon',
+          params: { accountId: 14062, siteId: 70608, zoneId: 335918 }
+        }
+      ]
+    }
+  ];
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var auctionCount = 0;
+  var bidCount = 0;
+  var startTime = null;
+  var timerInterval = null;
+  var activeTab = 'req';
+  var lastRequest = null;
+  var lastResponse = null;
+
+  var adUnitConfigStr = JSON.stringify({
+    code: 'div-banner-300x250',
+    mediaTypes: { banner: { sizes: [[300, 250]] } },
+    bids: [
+      { bidder: 'appnexus', params: { placementId: 13144370 } },
+      { bidder: 'rubicon',  params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
+      {
+        "// APEX (roadmap)": "",
+        bidder: 'apex',
+        params: { agentId: '0x1234...erc8004', endpoint: 'https://api.apexnetwork.app/openrtb2/auction' }
+      }
+    ]
+  }, null, 2);
+
+  // ── Prebid setup ──────────────────────────────────────────────────────────
+  pbjs.que.push(function () {
+    pbjs.setConfig({
+      debug: false,
+      bidderTimeout: 3000,
+      enableSendAllBids: true,
+      priceGranularity: 'medium',
+      currency: { adServerCurrency: 'USD' }
+    });
+
+    pbjs.addAdUnits(adUnits);
+
+    // Hook into bid events for live logging
+    pbjs.onEvent('bidRequested', function (data) {
+      setStatus('slot1', 'bidding');
+      setStatus('slot2', 'bidding');
+      document.getElementById('sum-status').textContent = 'Requesting bids…';
+
+      // Capture a simplified bid request for display
+      lastRequest = {
+        id: 'auction-' + auctionCount,
+        imp: adUnits.map(function (u) {
+          return {
+            id: u.code,
+            banner: u.mediaTypes.banner,
+            bidfloor: 0.50,
+            bidfloorcur: 'USD'
+          };
+        }),
+        site: {
+          'id': 'apex-agent-demo',
+          'page': window.location.href,
+          'publisher': {
+            'id': 'apex-erc8004-0x1234',   // ← this is what APEX would populate
+            'name': 'APEX Agent Publisher'
+          }
+        },
+        '// NOTE': 'In APEX, publisher.id = ERC-8004 agent token ID on Base mainnet'
+      };
+      if (activeTab === 'req') renderCode(lastRequest);
+    });
+
+    pbjs.onEvent('bidResponse', function (bid) {
+      bidCount++;
+      document.getElementById('sum-bids').textContent = bidCount;
+      addBidEntry(bid, false);
+
+      lastResponse = {
+        id: 'auction-' + auctionCount,
+        seatbid: [{
+          bid: [{
+            id: bid.bidId || bid.requestId,
+            impid: bid.adUnitCode,
+            price: bid.cpm,
+            adid: bid.ad ? '(creative payload)' : 'empty',
+            crid: bid.creativeId || '—',
+            w: bid.width,
+            h: bid.height,
+            '// x402 extension (APEX)': {
+              paymentRequired: true,
+              amount: bid.cpm / 1000,
+              currency: 'USDC',
+              settlementContract: '0xapex...'
+            }
+          }],
+          seat: bid.bidderCode
+        }],
+        cur: 'USD'
+      };
+      if (activeTab === 'res') renderCode(lastResponse);
+    });
+
+    pbjs.onEvent('noBid', function (bid) {
+      addBidEntry({ bidderCode: bid.bidder, adUnitCode: bid.adUnitCode, cpm: 0 }, true);
+    });
+
+    pbjs.onEvent('auctionEnd', function (data) {
+      var elapsed = Date.now() - startTime;
+      clearInterval(timerInterval);
+
+      document.getElementById('sum-elapsed').textContent = elapsed + 'ms';
+      document.getElementById('timerDisplay').textContent = elapsed + 'ms';
+
+      var winners = pbjs.getHighestCpmBids();
+      if (winners.length > 0) {
+        var topCpm = Math.max.apply(null, winners.map(function (b) { return b.cpm; }));
+        document.getElementById('sum-cpm').textContent = '$' + topCpm.toFixed(3) + ' CPM';
+        document.getElementById('sum-status').textContent = 'Complete — ads rendering';
+
+        winners.forEach(function (bid) {
+          markWinner(bid);
+          renderAd(bid);
+        });
+      } else {
+        document.getElementById('sum-status').textContent = 'Complete — no bids';
+        setStatus('slot1', 'nobid');
+        setStatus('slot2', 'nobid');
+      }
+
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('runBtn').textContent = 'Run Again';
+    });
+  });
+
+  // ── Auction runner ────────────────────────────────────────────────────────
+  function runAuction() {
+    var btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+
+    // Reset UI
+    auctionCount++;
+    bidCount = 0;
+    startTime = Date.now();
+    document.getElementById('sum-auctions').textContent = auctionCount;
+    document.getElementById('sum-bids').textContent = '0';
+    document.getElementById('sum-cpm').textContent = '—';
+    document.getElementById('sum-elapsed').textContent = '—';
+    document.getElementById('bidEntries').innerHTML = '';
+    setStatus('slot1', 'bidding');
+    setStatus('slot2', 'bidding');
+
+    // Reset ad containers
+    ['div-banner-300x250', 'div-banner-728x90'].forEach(function (id) {
+      var container = document.getElementById(id);
+      var sizes = id === 'div-banner-300x250' ? '300×250' : '728×90';
+      container.innerHTML = '<div class="ad-placeholder"><div class="size">' + sizes + '</div>Bidding…</div>';
+    });
+
+    // Start elapsed timer
+    timerInterval = setInterval(function () {
+      if (startTime) {
+        document.getElementById('timerDisplay').textContent = (Date.now() - startTime) + 'ms';
+      }
+    }, 50);
+
+    pbjs.que.push(function () {
+      pbjs.removeAdUnit([]);
+      pbjs.addAdUnits(adUnits);
+      pbjs.requestBids({
+        bidsBackHandler: function () {
+          // handled by auctionEnd event
+        }
+      });
+    });
+  }
+
+  // ── Ad rendering ─────────────────────────────────────────────────────────
+  function renderAd(bid) {
+    var container = document.getElementById(bid.adUnitCode);
+    if (!container) return;
+
+    setStatus(bid.adUnitCode === 'div-banner-300x250' ? 'slot1' : 'slot2', 'won');
+
+    if (bid.ad) {
+      var iframe = document.createElement('iframe');
+      iframe.style.border = 'none';
+      iframe.style.width = bid.width + 'px';
+      iframe.style.height = bid.height + 'px';
+      iframe.style.maxWidth = '100%';
+      iframe.setAttribute('scrolling', 'no');
+      container.innerHTML = '';
+      container.appendChild(iframe);
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(bid.ad);
+      iframe.contentDocument.close();
+    } else {
+      container.innerHTML = [
+        '<div style="padding:16px; text-align:center;">',
+        '<div style="font-size:10px; color:#666; margin-bottom:8px;">',
+          bid.bidderCode.toUpperCase() + ' · $' + bid.cpm.toFixed(3) + ' CPM',
+        '</div>',
+        '<div style="font-size:18px; font-weight:700; color:#4ade80;">' + bid.width + '×' + bid.height + '</div>',
+        '<div style="font-size:10px; color:#444; margin-top:6px;">No creative returned (test mode)</div>',
+        '</div>'
+      ].join('');
+    }
+  }
+
+  // ── Bid log helpers ───────────────────────────────────────────────────────
+  function addBidEntry(bid, isNoBid) {
+    var container = document.getElementById('bidEntries');
+    var entry = document.createElement('div');
+    entry.className = 'bid-entry' + (isNoBid ? '' : '');
+    entry.id = 'bid-' + (bid.requestId || bid.bidId || Math.random());
+    var elapsed = startTime ? (Date.now() - startTime) + 'ms' : '—';
+    entry.innerHTML = [
+      '<span class="bidder">' + (bid.bidderCode || bid.bidder || '?') + '</span>',
+      '<span class="slot-lbl">' + (bid.adUnitCode || '—') + '</span>',
+      '<span class="cpm' + (isNoBid ? ' nobid' : '') + '">' + (isNoBid ? 'no bid' : '$' + bid.cpm.toFixed(3)) + '</span>',
+      '<span class="time">' + elapsed + '</span>'
+    ].join('');
+    container.appendChild(entry);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function markWinner(bid) {
+    var entries = document.querySelectorAll('.bid-entry');
+    entries.forEach(function (el) {
+      var bidderSpan = el.querySelector('.bidder');
+      var slotSpan = el.querySelector('.slot-lbl');
+      if (bidderSpan && slotSpan &&
+          bidderSpan.textContent === bid.bidderCode &&
+          slotSpan.textContent === bid.adUnitCode) {
+        el.classList.add('winner');
+      }
+    });
+  }
+
+  // ── Status helpers ────────────────────────────────────────────────────────
+  function setStatus(slotId, state) {
+    var el = document.getElementById('status-' + slotId);
+    if (!el) return;
+    var labels = { waiting: 'Waiting', bidding: 'Bidding…', won: 'Ad served', nobid: 'No bid' };
+    el.className = 'slot-status ' + state;
+    el.textContent = labels[state] || state;
+  }
+
+  // ── Code viewer ───────────────────────────────────────────────────────────
+  function showTab(tab) {
+    activeTab = tab;
+    ['req','res','adunit'].forEach(function (t) {
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    });
+    if (tab === 'req' && lastRequest) renderCode(lastRequest);
+    else if (tab === 'res' && lastResponse) renderCode(lastResponse);
+    else if (tab === 'adunit') {
+      document.getElementById('codeView').innerHTML = syntaxHighlight(adUnitConfigStr);
+    } else {
+      document.getElementById('codeView').textContent = '// Run an auction first';
+    }
+  }
+
+  function renderCode(obj) {
+    document.getElementById('codeView').innerHTML = syntaxHighlight(JSON.stringify(obj, null, 2));
+  }
+
+  function syntaxHighlight(json) {
+    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return json.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      function (match) {
+        var cls = 'num';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) cls = 'key';
+          else cls = 'str';
+        } else if (/true|false/.test(match)) {
+          cls = 'bool';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+      }
+    );
+  }
+
+  // Show ad unit config by default
+  document.addEventListener('DOMContentLoaded', function () {
+    showTab('adunit');
+  });
+</script>
+
+</body>
+</html>
